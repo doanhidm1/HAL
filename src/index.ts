@@ -10,8 +10,8 @@ import { readFileSync, existsSync } from "fs";
 import * as YAML from "yaml";
 
 // Environment configuration
-const SWAGGER_FILE_PATH = process.env.HAL_SWAGGER_FILE;
-const API_BASE_URL = process.env.HAL_API_BASE_URL;
+const SWAGGER_FILE_PATH = process.env.HAL_SWAGGER_FILE?.trim();
+const API_BASE_URL = process.env.HAL_API_BASE_URL?.trim();
 
 // Secrets management
 interface SecretInfo {
@@ -496,27 +496,62 @@ async function registerSwaggerTools(spec: OpenAPISpec) {
   }
 }
 
+// Helper function to fetch spec content from URL
+async function fetchSpecContent(url: string, filePath: string): Promise<{ content: string; isYaml: boolean } | null> {
+  console.log(`Loading Swagger specification from URL: ${url}`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    console.error(`Failed to fetch Swagger spec from URL: ${response.status} ${response.statusText}`);
+    return null;
+  }
+  const content = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  const isYaml = contentType.includes('yaml') || contentType.includes('yml') ||
+                 filePath.endsWith('.yaml') || filePath.endsWith('.yml');
+  return { content, isYaml };
+}
+
 // Function to load and parse Swagger/OpenAPI file
 async function loadSwaggerSpec(): Promise<OpenAPISpec | null> {
   if (!SWAGGER_FILE_PATH) {
     return null;
   }
-  
+
   try {
-    if (!existsSync(SWAGGER_FILE_PATH)) {
-      console.error(`Swagger file not found: ${SWAGGER_FILE_PATH}`);
-      return null;
-    }
-    
-    const fileContent = readFileSync(SWAGGER_FILE_PATH, 'utf-8');
-    let spec: OpenAPISpec;
-    
-    if (SWAGGER_FILE_PATH.endsWith('.yaml') || SWAGGER_FILE_PATH.endsWith('.yml')) {
-      spec = YAML.parse(fileContent);
+    let specContent: string;
+    let isYaml = false;
+
+    // Determine spec source and content
+    if (SWAGGER_FILE_PATH.startsWith('http://') || SWAGGER_FILE_PATH.startsWith('https://')) {
+      // Direct URL
+      const result = await fetchSpecContent(SWAGGER_FILE_PATH, SWAGGER_FILE_PATH);
+      if (!result) return null;
+      specContent = result.content;
+      isYaml = result.isYaml;
+    } else if (SWAGGER_FILE_PATH.startsWith('/') && API_BASE_URL) {
+      // Relative path combined with API_BASE_URL
+      const result = await fetchSpecContent(`${API_BASE_URL}${SWAGGER_FILE_PATH}`, SWAGGER_FILE_PATH);
+      if (!result) return null;
+      specContent = result.content;
+      isYaml = result.isYaml;
     } else {
-      spec = JSON.parse(fileContent);
+      // Local file path
+      if (!existsSync(SWAGGER_FILE_PATH)) {
+        console.error(`Swagger file not found: ${SWAGGER_FILE_PATH}`);
+        return null;
+      }
+      specContent = readFileSync(SWAGGER_FILE_PATH, 'utf-8');
+      isYaml = SWAGGER_FILE_PATH.endsWith('.yaml') || SWAGGER_FILE_PATH.endsWith('.yml');
     }
-    
+
+    let spec: OpenAPISpec;
+
+    if (isYaml) {
+      spec = YAML.parse(specContent);
+    } else {
+      spec = JSON.parse(specContent);
+    }
+
     // Validate the spec using swagger-parser
     try {
       const parsedSpec = await (SwaggerParser as any).validate(spec);
@@ -525,7 +560,7 @@ async function loadSwaggerSpec(): Promise<OpenAPISpec | null> {
       console.error('Swagger validation failed, using raw spec:', parseError);
       return spec;
     }
-    
+
   } catch (error) {
     console.error('Error loading Swagger spec:', error);
     return null;

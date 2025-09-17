@@ -60,6 +60,26 @@ To enable automatic tool generation from an OpenAPI specification and use secret
 }
 ```
 
+### URL-based Configuration
+
+You can also load OpenAPI specs directly from URLs:
+
+```json
+{
+  "mcpServers": {
+    "hal": {
+      "command": "npx",
+      "args": ["hal-mcp"],
+      "env": {
+        "HAL_SWAGGER_FILE": "/swagger/v1/swagger.json",
+        "HAL_API_BASE_URL": "http://localhost:5065",
+        "HAL_SECRET_API_KEY": "your-secret-api-key"
+      }
+    }
+  }
+}
+```
+
 ### Direct Usage
 
 ```bash
@@ -68,13 +88,19 @@ npx hal-mcp
 
 # Or with Swagger/OpenAPI integration
 HAL_SWAGGER_FILE=/path/to/api.yaml HAL_API_BASE_URL=https://api.example.com npx hal-mcp
+
+# Or load from URL
+HAL_SWAGGER_FILE=/swagger/v1/swagger.json HAL_API_BASE_URL=http://localhost:5065 npx hal-mcp
 ```
 
 ## Configuration
 
 HAL supports the following environment variables:
 
-- `HAL_SWAGGER_FILE`: Path to OpenAPI/Swagger specification file (JSON or YAML format)
+- `HAL_SWAGGER_FILE`: Path or URL to OpenAPI/Swagger specification file (JSON or YAML format). Can be:
+  - Local file path: `/path/to/api.yaml`
+  - Full URL: `https://api.example.com/swagger.json`
+  - Relative path: `/swagger/v1/swagger.json` (combined with `HAL_API_BASE_URL`)
 - `HAL_API_BASE_URL`: Base URL for API requests (overrides the servers specified in the OpenAPI spec)
 - `HAL_SECRET_*`: Secret values for secure substitution in requests (e.g., `HAL_SECRET_TOKEN=abc123`)
 - `HAL_ALLOW_*`: URL restrictions for namespaced secrets (e.g., `HAL_ALLOW_MICROSOFT="https://azure.microsoft.com/*"`)
